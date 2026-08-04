@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Fiverr Gig Scraper - Basic",
+  "version": "0.3",
+  "description": "Click a button, save gig or profile details to a .md file",
+  "permissions": ["downloads"],
+  "host_permissions": ["https://www.fiverr.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.fiverr.com/*"],
+      "js": [
+        "src/ui/widget.js",
+        "src/parsers/gig-parsers.js",
+        "src/parsers/profile-parsers.js",
+        "src/markdown/gig-markdown.js",
+        "src/markdown/profile-markdown.js",
+        "src/content-main.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

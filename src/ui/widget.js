@@ -4,21 +4,30 @@
 // into a labeled pill on hover, matching Fiverr's seller-widget style.
 // ============================================================
 
-function createFloatingButton({ iconSVG, label, color, bottomOffset }) {
+function createButtonRow() {
+  const row = document.createElement("div");
+  row.style.cssText = "position:fixed;bottom:16px;right:16px;z-index:999999;display:flex;flex-direction:row-reverse;align-items:center;gap:10px;";
+  document.body.appendChild(row);
+  return row;
+}
+
+function createFloatingButton({ iconSVG, label, color, container }) {
   const el = document.createElement("div");
   el.innerHTML = `
     <div style="width:48px;height:48px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
       ${iconSVG}
     </div>
     <div style="display:flex;flex-direction:column;justify-content:center;overflow:hidden;white-space:nowrap;max-width:0;transition:max-width 0.25s ease;">
-      <span style="font-size:13px;font-weight:600;color:#222325;padding-left:12px;">${label}</span>
+      <span style="font-size:13px;font-weight:600;color:#222325;padding-right:12px;">${label}</span>
     </div>
   `;
-  el.style.cssText = `position:fixed;bottom:${bottomOffset}px;left:16px;z-index:999999;display:flex;align-items:center;background:#fff;border-radius:28px;box-shadow:0 2px 10px rgba(0,0,0,0.15);cursor:pointer;padding:4px;transition:padding 0.25s ease;`;
+  // Reverse the inner row so the label appears to the LEFT of the icon
+  // (since the icon is on the right edge of the screen)
+  el.style.cssText = "display:flex;flex-direction:row-reverse;align-items:center;background:#fff;border-radius:28px;box-shadow:0 2px 10px rgba(0,0,0,0.15);cursor:pointer;padding:4px;transition:padding 0.25s ease;";
 
   const labelWidth = Math.min(200, label.length * 8 + 40);
   el.addEventListener("mouseenter", () => {
-    el.style.padding = "4px 16px 4px 4px";
+    el.style.padding = "4px 4px 4px 16px";
     el.querySelector('div:last-child').style.maxWidth = `${labelWidth}px`;
   });
   el.addEventListener("mouseleave", () => {
@@ -26,33 +35,25 @@ function createFloatingButton({ iconSVG, label, color, bottomOffset }) {
     el.querySelector('div:last-child').style.maxWidth = "0";
   });
 
-  document.body.appendChild(el);
+  container.appendChild(el);
   return el;
 }
 
-function createLabelInput() {
-  const wrapper = document.createElement("div");
-  wrapper.style.cssText = "position:fixed;bottom:132px;left:16px;z-index:999999;background:#fff;border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,0.15);padding:6px 12px;display:flex;align-items:center;gap:6px;";
-
-  const input = document.createElement("input");
-  input.type = "text";
-  input.placeholder = "niche label (optional)";
-  input.value = localStorage.getItem("fiverrScraperLabel") || "";
-  input.style.cssText = "border:none;outline:none;font-size:12px;width:140px;color:#222325;";
-  input.addEventListener("input", () => {
-    localStorage.setItem("fiverrScraperLabel", input.value.trim());
-  });
-
-  wrapper.appendChild(input);
-  document.body.appendChild(wrapper);
-  return input;
+function isGigPage() {
+  const segments = location.pathname.split('/').filter(Boolean);
+  // gig URLs look like /username/gig-slug-here (2+ segments)
+  // AND a packages table exists, which profile pages never have
+  return segments.length >= 2 && !!document.querySelector('.gig-page-packages-table');
 }
 
-function getScraperLabel() {
-  const raw = localStorage.getItem("fiverrScraperLabel") || "";
-  const clean = raw.trim().toLowerCase().replace(/[^\w-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  return clean;
+function isProfilePage() {
+  const segments = location.pathname.split('/').filter(Boolean);
+  // profile URLs look like /username (exactly 1 segment)
+  return segments.length === 1;
 }
+
+
+
 
 
 function setButtonLoading(buttonEl) {

@@ -1,12 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "Fiverr Gig Scraper - Basic",
-  "version": "0.3",
-  "description": "Click a button, save gig or profile details to a .md file",
-  "permissions": ["downloads"],
+  "name": "Fiverr Gig Scraper",
+  "version": "0.4",
+  "description": "Scrape Fiverr gigs and profiles, browse saved results in the popup, export as Markdown",
+  "permissions": ["downloads", "storage"],
   "host_permissions": ["https://www.fiverr.com/*"],
   "background": {
     "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Fiverr Scraper"
   },
   "content_scripts": [
     {

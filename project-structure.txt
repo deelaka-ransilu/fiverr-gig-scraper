@@ -1,0 +1,19 @@
+===== PROJECT STRUCTURE: fiverr-gig-scraper-v2 =====
+===== Generated: 08/06/2026 13:26:00 =====
+
+Folder PATH listing for volume Projects
+Volume serial number is 000002EF BE1F:438D
+E:\FIVERR\FIVERR-GIG-SCRAPER\FIVERR-GIG-SCRAPER-V2\SRC
+|   content-main.js
+|   
++---markdown
+|       gig-markdown.js
+|       profile-markdown.js
+|       
++---parsers
+|       gig-parsers.js
+|       profile-parsers.js
+|       
+\---ui
+        widget.js
+        

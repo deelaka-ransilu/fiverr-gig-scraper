@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fiverr Scraper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+
+    --ink: #18181B;
+    --ink-active: #18181B;
+    --ink-soft: #52525B;
+    --ink-faint: #A1A1AA;
+    --border: #E4E4E7;
+    --surface: #FFFFFF;
+    --surface-alt: #FAFAFA;
+
+    --green: #16A34A;
+    --green-tint-bg: #DCFCE7;
+    --green-tint-text: #15803D;
+    --blue: #2563EB;
+
+    --danger: #DC2626;
+    --danger-soft: #FEF2F2;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .popup {
+    width: 380px;
+    max-height: 580px;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .header {
+    padding: var(--space-4);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-title { display: flex; align-items: baseline; gap: var(--space-2); }
+  .header h1 { font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+  .header .count { font-size: 12px; color: var(--ink-faint); font-weight: 500; }
+
+  .header-actions { display: flex; align-items: center; gap: var(--space-2); }
+  .download-all-header-btn, .clear-all-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px;
+    background: var(--surface);
+    border: 1.5px solid var(--green);
+    color: var(--green-tint-text);
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .download-all-header-btn:hover { background: var(--green); color: #fff; }
+  .clear-all-btn { border-color: var(--danger); color: var(--danger); }
+  .clear-all-btn:hover { background: var(--danger); color: #fff; }
+
+  .filters {
+    display: flex; gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-alt);
+  }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip {
+    flex-shrink: 0;
+    font-size: 11px; font-weight: 600;
+    padding: var(--space-1) var(--space-3);
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .chip:hover { border-color: var(--ink-faint); }
+  .chip.active { background: var(--ink-active); border-color: var(--ink-active); color: #fff; }
+
+  .list { overflow-y: auto; flex: 1; }
+  .empty-state {
+    padding: var(--space-6) var(--space-4);
+    text-align: center;
+    color: var(--ink-faint);
+    font-size: 13px; font-weight: 500;
+    line-height: 1.6;
+  }
+
+  .seller-group { border-bottom: 1px solid var(--border); }
+  .seller-group:last-child { border-bottom: none; }
+
+  .seller-header {
+    display: flex; align-items: center;
+    padding: var(--space-3) var(--space-4);
+    cursor: pointer;
+    gap: var(--space-3);
+    transition: background 0.12s ease;
+  }
+  .seller-header:hover { background: var(--surface-alt); }
+
+  .chevron {
+    display: flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px;
+    color: var(--ink);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+  }
+  .seller-group.expanded .chevron { transform: rotate(90deg); color: var(--ink-active); }
+
+  .seller-name {
+    font-size: 14.5px; font-weight: 700;
+    color: var(--ink);
+    flex: 1;
+    letter-spacing: -0.005em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .seller-badges { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+  .badge { font-size: 11.5px; font-weight: 700; padding: 5px 13px; border-radius: 999px; color: #fff; }
+  .badge.gig-badge { background: var(--green); }
+  .badge.profile-badge { background: var(--blue); }
+
+  .items { display: none; padding: 0 var(--space-4) var(--space-2) var(--space-4); }
+  .seller-group.expanded .items { display: block; }
+
+  .item {
+    display: flex; align-items: center;
+    padding: var(--space-2) 0;
+    border-top: 1px solid var(--border);
+    gap: var(--space-2);
+  }
+  .item-info { flex: 1; min-width: 0; }
+  .item-title {
+    font-size: 12px; font-weight: 500; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.4;
+  }
+  .item-meta { display: flex; align-items: center; gap: var(--space-2); margin-top: 3px; }
+  .item-date { font-size: 10px; color: var(--ink-faint); font-weight: 500; }
+  .item-category {
+    font-size: 10px; font-weight: 700;
+    color: var(--green-tint-text);
+    background: var(--green-tint-bg);
+    padding: 3px 10px;
+    border-radius: 999px;
+    line-height: 1.2;
+  }
+
+  .item-actions { display: flex; gap: 2px; flex-shrink: 0; }
+  .icon-btn {
+    width: 28px; height: 28px;
+    border: none; background: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-soft);
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .icon-btn:hover { background: var(--surface-alt); color: var(--ink); }
+  .icon-btn.delete-btn:hover { background: var(--danger-soft); color: var(--danger); }
+
+  .viewer-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(24,24,27,0.5);
+    align-items: center; justify-content: center;
+    z-index: 10;
+  }
+  .viewer-overlay.open { display: flex; }
+  .viewer {
+    width: 340px; max-height: 480px;
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+  }
+  .viewer-header {
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    gap: var(--space-3);
+  }
+  .viewer-header span {
+    font-size: 12px; font-weight: 700; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .viewer-close {
+    background: none; border: none; cursor: pointer;
+    font-size: 13px; color: var(--ink-faint);
+    width: 22px; height: 22px; border-radius: var(--radius-sm);
+    flex-shrink: 0;
+  }
+  .viewer-close:hover { background: var(--border); color: var(--ink); }
+  .viewer-body {
+    padding: var(--space-4);
+    overflow-y: auto;
+    font-size: 11.5px; line-height: 1.7; color: var(--ink-soft);
+    white-space: pre-wrap;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+</style>
+</head>
+<body>
+
+<div class="popup">
+  <div class="header">
+    <div class="header-title">
+      <h1>Fiverr Scraper</h1>
+      <span class="count" id="totalCount"></span>
+    </div>
+    <div class="header-actions">
+      <button class="download-all-header-btn" id="downloadAllBtn" title="Download all"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="clear-all-btn" id="clearAllBtn" title="Clear all"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+  </div>
+  <div class="filters" id="filters"></div>
+  <div class="list" id="list"></div>
+</div>
+
+<div class="viewer-overlay" id="viewerOverlay">
+  <div class="viewer">
+    <div class="viewer-header">
+      <span id="viewerTitle"></span>
+      <button class="viewer-close" id="viewerCloseBtn">✕</button>
+    </div>
+    <div class="viewer-body" id="viewerBody"></div>
+  </div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

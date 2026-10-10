@@ -133,7 +133,7 @@ function parseAboutGig() {
 
 function parseComparisonTable() {
   const table = document.querySelector('.gig-page-packages-table table');
-  if (!table) return [];
+  if (!table) return parseSinglePackage();
 
   const rows = Array.from(table.querySelectorAll('tbody > tr'));
   const headerRow = rows.find(r => r.classList.contains('package-type'));

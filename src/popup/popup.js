@@ -2,6 +2,9 @@
 // Popup logic - reads/writes chrome.storage.local under the
 // "sellers" key. Auto-refreshes live if storage changes while
 // the popup is open (e.g. you scrape a new gig in another tab).
+//
+// Uses an in-popup confirm dialog (confirmDialog) and a small toast
+// (showToast) instead of the browser's native confirm()/alert().
 // ============================================================
 
 let sellers = {};
@@ -125,7 +128,7 @@ function render() {
     } else if (hasAny) {
       list.innerHTML = `<div class="empty-state">Nothing in this category.</div>`;
     } else {
-      list.innerHTML = `<div class="empty-state">Nothing saved yet.<br>Open a Fiverr gig or seller profile and click the green (gig) or blue (profile) button in the bottom-right corner.</div>`;
+      list.innerHTML = `<div class="empty-state">Nothing saved yet.<br>Open a Fiverr gig or seller profile and click the green (gig) or dark (profile) button in the bottom-right corner.</div>`;
     }
     document.getElementById("totalCount").textContent = "";
     return;
@@ -231,6 +234,49 @@ function flashIcon(btn) {
   }, 1200);
 }
 
+// ---- toast -------------------------------------------------------
+let toastTimer = null;
+function showToast(message) {
+  const el = document.getElementById("toast");
+  el.textContent = message;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+// ---- confirm dialog ----------------------------------------------
+// confirmDialog({ title, message, note, confirmLabel }) -> Promise<boolean>
+// Cancel is focused by default so Enter never deletes by accident.
+let dialogResolve = null;
+
+function confirmDialog({ title, message, note = "", confirmLabel = "Delete" }) {
+  return new Promise(resolve => {
+    dialogResolve = resolve;
+    document.getElementById("dialogTitle").textContent = title;
+    document.getElementById("dialogMsg").textContent = message;
+    const noteEl = document.getElementById("dialogNote");
+    noteEl.textContent = note;
+    noteEl.style.display = note ? "" : "none";
+    document.getElementById("dialogConfirm").textContent = confirmLabel;
+    document.getElementById("dialogOverlay").classList.add("open");
+    document.getElementById("dialogCancel").focus();
+  });
+}
+
+function closeDialog(result) {
+  if (!dialogResolve) return;
+  document.getElementById("dialogOverlay").classList.remove("open");
+  const resolve = dialogResolve;
+  dialogResolve = null;
+  resolve(result);
+}
+
+document.getElementById("dialogCancel").addEventListener("click", () => closeDialog(false));
+document.getElementById("dialogConfirm").addEventListener("click", () => closeDialog(true));
+document.getElementById("dialogOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "dialogOverlay") closeDialog(false);
+});
+
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -255,7 +301,7 @@ async function copyItem(refId, btn) {
   const { entry } = resolveRef(refId);
   const ok = await copyText(entry.content);
   if (ok) flashIcon(btn);
-  else alert("Couldn't copy to the clipboard.");
+  else showToast("Couldn't copy to the clipboard");
 }
 
 function openItem(refId) {
@@ -287,6 +333,19 @@ document.getElementById("viewerCopyBtn").addEventListener("click", async (e) => 
   }
 });
 document.addEventListener("keydown", (e) => {
+  // The dialog sits on top of everything, so it gets Esc and Tab first.
+  if (dialogResolve) {
+    if (e.key === "Escape") { e.preventDefault(); closeDialog(false); }
+    if (e.key === "Tab") {
+      // keep focus inside the two dialog buttons
+      const cancel = document.getElementById("dialogCancel");
+      const confirmBtn = document.getElementById("dialogConfirm");
+      const first = e.shiftKey ? confirmBtn : cancel;
+      const last = e.shiftKey ? cancel : confirmBtn;
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    return;
+  }
   if (e.key === "Escape") closeViewer();
 });
 document.getElementById("searchInput").addEventListener("input", (e) => {
@@ -374,12 +433,33 @@ async function deleteItem(refId) {
   render();
 }
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 async function clearAll() {
-  if (!confirm("Delete all saved gigs and profiles? This can't be undone.")) return;
+  const names = Object.keys(sellers);
+  if (names.length === 0) { showToast("Nothing to clear"); return; }
+
+  const gigCount = names.reduce((n, u) => n + sellers[u].gigs.length, 0);
+  const profileCount = names.reduce((n, u) => n + (sellers[u].profile ? 1 : 0), 0);
+
+  const parts = [];
+  if (gigCount) parts.push(plural(gigCount, "gig"));
+  if (profileCount) parts.push(plural(profileCount, "profile"));
+
+  const ok = await confirmDialog({
+    title: "Delete everything?",
+    message: `This permanently deletes ${parts.join(" and ")} from ${plural(names.length, "seller")}.`,
+    note: "Tip: use Download all first if you want a copy.",
+    confirmLabel: "Delete all"
+  });
+  document.getElementById("clearAllBtn").focus();
+  if (!ok) return;
+
   sellers = {};
   expandedSellers.clear();
   await chrome.storage.local.set({ sellers });
   render();
+  showToast("All saved items deleted");
 }
 
 function combineSellerMarkdown(username, s) {
@@ -402,7 +482,7 @@ function combineSellerMarkdown(username, s) {
 
 function downloadAll() {
   const usernames = Object.keys(sellers);
-  if (usernames.length === 0) { alert("Nothing saved yet."); return; }
+  if (usernames.length === 0) { showToast("Nothing saved yet"); return; }
 
   // One combined file per seller (profile + all their gigs merged),
   // rather than a separate download per item. Stagger slightly so

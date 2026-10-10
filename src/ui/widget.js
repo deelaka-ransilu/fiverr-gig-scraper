@@ -2,7 +2,22 @@
 // Reusable floating pill-button widget
 // Creates a circular icon button (bottom-right) that expands
 // into a labeled pill on hover, matching Fiverr's seller-widget style.
+//
+// Palette (Fiverr brand):
+//   green  #1DBF73  gig button
+//   ink    #222325  profile button / label text
+//   saved  #095933  "already saved" state (deep Fiverr green)
 // ============================================================
+
+const FGS_COLORS = {
+  green: "#1DBF73",
+  ink: "#222325",
+  saved: "#095933"
+};
+
+function labelWidthFor(text) {
+  return Math.min(240, text.length * 8 + 40);
+}
 
 function createButtonRow() {
   const row = document.createElement("div");
@@ -18,17 +33,19 @@ function createFloatingButton({ iconSVG, label, color, container }) {
       ${iconSVG}
     </div>
     <div style="display:flex;flex-direction:column;justify-content:center;overflow:hidden;white-space:nowrap;max-width:0;transition:max-width 0.25s ease;">
-      <span style="font-size:13px;font-weight:600;color:#222325;padding-right:12px;">${label}</span>
+      <span style="font-size:13px;font-weight:600;color:${FGS_COLORS.ink};padding-right:12px;">${label}</span>
     </div>
   `;
   // Reverse the inner row so the label appears to the LEFT of the icon
   // (since the icon is on the right edge of the screen)
   el.style.cssText = "display:flex;flex-direction:row-reverse;align-items:center;background:#fff;border-radius:28px;box-shadow:0 2px 10px rgba(0,0,0,0.15);cursor:pointer;padding:4px;transition:padding 0.25s ease;";
 
-  const labelWidth = Math.min(200, label.length * 8 + 40);
+  // Remember the unsaved look so setButtonSavedLook can switch back to it
+  el._fgs = { iconSVG, label, color };
+
   el.addEventListener("mouseenter", () => {
     el.style.padding = "4px 4px 4px 16px";
-    el.querySelector('div:last-child').style.maxWidth = `${labelWidth}px`;
+    el.querySelector('div:last-child').style.maxWidth = `${labelWidthFor(el.querySelector('span').textContent)}px`;
   });
   el.addEventListener("mouseleave", () => {
     el.style.padding = "4px";
@@ -39,11 +56,34 @@ function createFloatingButton({ iconSVG, label, color, container }) {
   return el;
 }
 
+// Switches a button between its normal look and the "already saved" look
+// (check icon, deep green, label "Already saved"). Clicking still re-scrapes
+// and overwrites the saved item.
+function setButtonSavedLook(buttonEl, saved) {
+  const iconWrapper = buttonEl.querySelector('div:first-child');
+  const labelWrap = buttonEl.querySelector('div:last-child');
+  const labelSpan = labelWrap.querySelector('span');
+  const cfg = buttonEl._fgs;
+  if (!cfg) return;
+
+  buttonEl.dataset.saved = saved ? "1" : "";
+  iconWrapper.innerHTML = saved ? ICONS.check : cfg.iconSVG;
+  iconWrapper.style.background = saved ? FGS_COLORS.saved : cfg.color;
+  labelSpan.textContent = saved ? "Already saved" : cfg.label;
+  buttonEl.title = saved ? "Already saved. Click to re-scrape and update it." : "";
+
+  if (buttonEl.matches(':hover')) {
+    labelWrap.style.maxWidth = `${labelWidthFor(labelSpan.textContent)}px`;
+  }
+}
+
 function isGigPage() {
   const segments = location.pathname.split('/').filter(Boolean);
   // gig URLs look like /username/gig-slug-here (2+ segments)
-  // AND a packages table exists, which profile pages never have
-  return segments.length >= 2 && !!document.querySelector('.gig-page-packages-table');
+  // AND an order box exists, which profile pages never have:
+  //  - .gig-page-packages-table : Basic/Standard/Premium comparison table
+  //  - .packages-tabs           : single-package (and tabbed) order box
+  return segments.length >= 2 && !!document.querySelector('.gig-page-packages-table, .packages-tabs');
 }
 
 function isProfilePage() {
@@ -64,9 +104,10 @@ function setButtonLoading(buttonEl) {
   };
 }
 
-// Success feedback, call AFTER restore(): the icon swaps to a check that
-// draws itself, a ring pulses out from the circle, and the pill opens to
-// show `text` (e.g. "Gig saved") for ~2s, then everything goes back to normal.
+// Success feedback, call AFTER restore() (and after setButtonSavedLook if the
+// resting state should be "saved"): the icon swaps to a check that draws
+// itself, a ring pulses out from the circle, and the pill opens to show
+// `text` (e.g. "Gig saved") for ~2s, then everything goes back to normal.
 function flashButtonSaved(buttonEl, text) {
   const iconWrapper = buttonEl.querySelector('div:first-child');
   const labelWrap = buttonEl.querySelector('div:last-child');
@@ -75,7 +116,7 @@ function flashButtonSaved(buttonEl, text) {
 
   const originalIcon = iconWrapper.innerHTML;
   const originalText = labelSpan.textContent;
-  const originalWidth = Math.min(200, originalText.length * 8 + 40);
+  const originalWidth = labelWidthFor(originalText);
   const ringColor = getComputedStyle(iconWrapper).backgroundColor;
 
   const drawStyle = reduceMotion
@@ -99,7 +140,7 @@ function flashButtonSaved(buttonEl, text) {
 
   labelSpan.textContent = text;
   buttonEl.style.padding = "4px 4px 4px 16px";
-  labelWrap.style.maxWidth = `${Math.min(200, text.length * 8 + 40)}px`;
+  labelWrap.style.maxWidth = `${labelWidthFor(text)}px`;
   buttonEl.style.pointerEvents = "none"; // no double-clicks while the confirmation is showing
 
   setTimeout(() => {
@@ -120,5 +161,6 @@ function flashButtonSaved(buttonEl, text) {
 
 const ICONS = {
   download: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  person: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7" r="4" stroke="white" stroke-width="2"/></svg>`
+  person: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7" r="4" stroke="white" stroke-width="2"/></svg>`,
+  check: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 };

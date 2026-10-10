@@ -4,21 +4,24 @@
 <meta charset="UTF-8">
 <title>Fiverr Scraper</title>
 <style>
+  /* Fiverr palette: green #1DBF73, ink #222325, grays #404145 / #74767E / #E4E5E7 / #F7F7F7.
+     Green marks gig things only (badges, category text, left rule). Profiles use ink. */
   :root {
-    --paper: #f5f7f5;
+    --paper: #f7f7f7;
     --surface: #ffffff;
-    --ink: #15221b;
-    --ink-soft: #2a3a31;
-    --muted: #66756c;
-    --line: #dde4df;
+    --ink: #222325;
+    --ink-soft: #404145;
+    --muted: #74767e;
+    --line: #e4e5e7;
     --green: #1dbf73;
-    --green-ink: #0b6b3e;
-    --green-wash: #e2f5eb;
-    --blue-ink: #1d4ed8;
-    --blue-wash: #e5edfd;
-    --danger: #b42318;
+    --green-ink: #095933;
+    --green-wash: #e3f7ec;
+    --green-rule: #8addb4;
+    --ink-wash: #ececed;
+    --danger: #d9342b;
+    --danger-dark: #b8281f;
     --danger-wash: #fdecea;
-    --focus: #3b82f6;
+    --focus: #095933;
   }
 
   * { box-sizing: border-box; }
@@ -26,7 +29,7 @@
 
   body {
     width: 420px;
-    min-height: 200px;
+    min-height: 240px;
     max-height: 600px;
     display: flex;
     flex-direction: column;
@@ -51,9 +54,10 @@
   header h1 {
     margin: 0;
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 700;
     letter-spacing: -0.01em;
   }
+  header h1 .dot { color: var(--green); }
   #totalCount {
     display: block;
     margin-top: 1px;
@@ -81,6 +85,9 @@
   .btn.danger:hover { background: var(--danger-wash); }
   .btn:not(.primary):not(.danger) { border-color: var(--line); background: var(--surface); }
   .btn:not(.primary):not(.danger):hover { background: var(--paper); }
+  /* filled red, used only by the confirm dialog's destructive button */
+  .btn.primary.danger-fill { background: var(--danger); }
+  .btn.primary.danger-fill:hover { background: var(--danger-dark); }
 
   /* ---------- search ---------- */
   #searchWrap {
@@ -178,7 +185,7 @@
     font-variant-numeric: tabular-nums;
   }
   .gig-badge { background: var(--green-wash); color: var(--green-ink); }
-  .profile-badge { background: var(--blue-wash); color: var(--blue-ink); }
+  .profile-badge { background: var(--ink-wash); color: var(--ink); }
 
   .chevron {
     display: inline-flex;
@@ -194,7 +201,7 @@
     overflow: hidden;
     visibility: hidden;
     margin: 0 12px 0 22px;
-    border-left: 2px solid var(--green-wash);
+    border-left: 2px solid var(--green-rule);
     transition: max-height 0.22s ease, visibility 0s 0.22s;
   }
   .seller-group.expanded .items {
@@ -238,7 +245,7 @@
     font-size: 11px;
   }
   .item-category { overflow: hidden; text-overflow: ellipsis; color: var(--green-ink); }
-  .item-kind { color: var(--blue-ink); font-weight: 600; }
+  .item-kind { color: var(--ink); font-weight: 600; }
 
   .item-actions { grid-column: 2; display: flex; gap: 1px; }
   .icon-btn {
@@ -297,6 +304,54 @@
     font: 12px/1.6 "Cascadia Mono", Consolas, ui-monospace, monospace;
   }
 
+  /* ---------- confirm dialog (replaces the browser's native confirm) ---------- */
+  #dialogOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(34, 35, 37, 0.55);
+  }
+  #dialogOverlay.open { display: flex; }
+  .dialog {
+    width: 100%;
+    max-width: 340px;
+    padding: 18px 18px 14px;
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  }
+  .dialog h2 {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .dialog p { margin: 0; color: var(--ink-soft); line-height: 1.5; }
+  .dialog p + p { margin-top: 4px; color: var(--muted); }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: 14px;
+    z-index: 30;
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: var(--ink);
+    color: #fff;
+    font-weight: 600;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 8px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
   }
@@ -305,7 +360,7 @@
 <body>
   <header>
     <div>
-      <h1>Fiverr Scraper</h1>
+      <h1>Fiverr Scraper<span class="dot">.</span></h1>
       <span id="totalCount"></span>
     </div>
     <div class="header-actions">
@@ -335,6 +390,20 @@
     </div>
     <pre id="viewerBody"></pre>
   </div>
+
+  <div id="dialogOverlay">
+    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialogTitle" aria-describedby="dialogMsg">
+      <h2 id="dialogTitle"></h2>
+      <p id="dialogMsg"></p>
+      <p id="dialogNote"></p>
+      <div class="dialog-actions">
+        <button class="btn" id="dialogCancel">Cancel</button>
+        <button class="btn primary danger-fill" id="dialogConfirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
 
   <script src="popup.js"></script>
 </body>

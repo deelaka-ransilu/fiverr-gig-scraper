@@ -12,6 +12,8 @@ let activeFilter = "all";
 let searchQuery = "";
 let viewingEntry = null;
 const expandedSellers = new Set(); // survives re-renders (search, filter, delete, live refresh)
+const selected = new Set();        // selection keys (see selKey), survives re-renders
+const visibleKeysBySeller = new Map(); // username -> selection keys currently shown in the list
 
 const svg = (inner, size = 16, sw = 2) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -96,6 +98,7 @@ function setFilter(cat) {
 }
 
 function render() {
+  pruneSelection();
   const hasAny = Object.keys(sellers).length > 0;
   document.getElementById("searchWrap").style.display = hasAny ? "" : "none";
   renderFilters();
@@ -131,10 +134,18 @@ function render() {
       list.innerHTML = `<div class="empty-state">Nothing saved yet.<br>Open a Fiverr gig or seller profile and click the green (gig) or dark (profile) button in the bottom-right corner.</div>`;
     }
     document.getElementById("totalCount").textContent = "";
+    visibleKeysBySeller.clear();
+    syncSelectionUI();
     return;
   }
 
   let totalItems = 0;
+  visibleKeysBySeller.clear();
+  rows.forEach(r => {
+    const keys = r.gigs.map(g => selKey(r.username, "gig", g));
+    if (r.hasProfile) keys.unshift(selKey(r.username, "profile", r.s.profile));
+    visibleKeysBySeller.set(r.username, keys);
+  });
   list.innerHTML = rows.map(r => {
     const gigCount = r.gigs.length;
     totalItems += gigCount + (r.hasProfile ? 1 : 0);
@@ -148,7 +159,10 @@ function render() {
     return `
       <div class="seller-group ${open ? "expanded" : ""}" data-username="${escapeAttr(r.username)}">
         <div class="seller-header">
-          <span class="seller-name">${escapeHtml(r.name)}</span>
+          <div class="seller-left">
+            <input type="checkbox" class="seller-check" data-username="${escapeAttr(r.username)}" aria-label="Select all from ${escapeAttr(r.name)}">
+            <span class="seller-name">${escapeHtml(r.name)}</span>
+          </div>
           <div class="seller-badges">
             ${gigCount ? `<span class="badge gig-badge">${gigCount} gig${gigCount > 1 ? "s" : ""}</span>` : ""}
             ${r.hasProfile ? `<span class="badge profile-badge">profile</span>` : ""}
@@ -184,6 +198,24 @@ function render() {
       if (action === "delete") deleteItem(refId);
     });
   });
+
+  // Selection checkboxes. Toggling doesn't re-render, so scroll position is kept.
+  list.querySelectorAll(".item-check").forEach(cb => {
+    cb.addEventListener("change", () => {
+      if (cb.checked) selected.add(cb.dataset.key); else selected.delete(cb.dataset.key);
+      syncSelectionUI();
+    });
+  });
+  list.querySelectorAll(".seller-check").forEach(cb => {
+    cb.addEventListener("click", (e) => e.stopPropagation()); // don't toggle expand/collapse
+    cb.addEventListener("change", () => {
+      (visibleKeysBySeller.get(cb.dataset.username) || []).forEach(k => {
+        if (cb.checked) selected.add(k); else selected.delete(k);
+      });
+      syncSelectionUI();
+    });
+  });
+  syncSelectionUI();
 }
 
 function chevronSVG() {
@@ -197,6 +229,7 @@ function itemRow(username, kind, index, entry) {
     : (entry.category ? `<span class="item-category">${escapeHtml(entry.category)}</span>` : "");
   return `
     <div class="item">
+      <input type="checkbox" class="item-check" data-key="${escapeAttr(selKey(username, kind, entry))}" aria-label="Select ${escapeAttr(entry.title)}">
       <div class="item-info">
         <div class="item-title" title="${escapeAttr(entry.title)}">${escapeHtml(entry.title)}</div>
         <div class="item-meta">
@@ -460,6 +493,95 @@ async function clearAll() {
   await chrome.storage.local.set({ sellers });
   render();
   showToast("All saved items deleted");
+}
+
+// ---- selection ---------------------------------------------------
+// Keys are stable (title-based, not list-index-based), so a selection
+// survives deletes, re-renders and live storage refreshes.
+function selKey(username, kind, entry) {
+  return kind === "profile" ? `${username}::profile` : `${username}::gig::${entry.title}`;
+}
+
+// Drop selected keys whose item no longer exists (deleted, cleared, re-titled).
+function pruneSelection() {
+  const valid = new Set();
+  Object.keys(sellers).forEach(u => {
+    const s = sellers[u];
+    if (s.profile) valid.add(selKey(u, "profile", s.profile));
+    s.gigs.forEach(g => valid.add(selKey(u, "gig", g)));
+  });
+  Array.from(selected).forEach(k => { if (!valid.has(k)) selected.delete(k); });
+}
+
+// Sets a checkbox to checked / unchecked / indeterminate based on its keys.
+function setTriState(cb, keys) {
+  const count = keys.filter(k => selected.has(k)).length;
+  cb.checked = keys.length > 0 && count === keys.length;
+  cb.indeterminate = count > 0 && count < keys.length;
+}
+
+// Single source of truth: the `selected` set drives every checkbox and the bottom bar.
+function syncSelectionUI() {
+  document.querySelectorAll(".item-check").forEach(cb => {
+    cb.checked = selected.has(cb.dataset.key);
+  });
+
+  const allVisible = [];
+  document.querySelectorAll(".seller-check").forEach(cb => {
+    const keys = visibleKeysBySeller.get(cb.dataset.username) || [];
+    allVisible.push(...keys);
+    setTriState(cb, keys);
+  });
+
+  setTriState(document.getElementById("selectAll"), allVisible);
+  document.getElementById("selectRow").style.display = allVisible.length ? "flex" : "none";
+
+  const n = selected.size;
+  document.getElementById("selectionCount").textContent = `${n} selected`;
+  document.getElementById("selectionBar").classList.toggle("show", n > 0);
+}
+
+document.getElementById("selectAll").addEventListener("change", (e) => {
+  Array.from(visibleKeysBySeller.values()).flat().forEach(k => {
+    if (e.target.checked) selected.add(k); else selected.delete(k);
+  });
+  syncSelectionUI();
+});
+document.getElementById("deselectBtn").addEventListener("click", () => {
+  selected.clear();
+  syncSelectionUI();
+});
+document.getElementById("downloadSelectedBtn").addEventListener("click", downloadSelected);
+
+// One file per seller. A seller with a single selected item downloads under that
+// item's normal name; two or more are merged into <seller>_selected.md.
+function downloadSelected() {
+  const picks = [];
+  Object.keys(sellers).forEach(username => {
+    const s = sellers[username];
+    const profile = s.profile && selected.has(selKey(username, "profile", s.profile)) ? s.profile : null;
+    const gigs = s.gigs.filter(g => selected.has(selKey(username, "gig", g)));
+    if (profile || gigs.length) picks.push({ username, profile, gigs });
+  });
+
+  if (picks.length === 0) { showToast("Nothing selected"); return; }
+
+  picks.forEach((p, i) => {
+    const total = p.gigs.length + (p.profile ? 1 : 0);
+    let filename, content;
+    if (total === 1) {
+      const kind = p.profile ? "profile" : "gig";
+      const entry = p.profile || p.gigs[0];
+      filename = fileNameFor(p.username, kind, entry);
+      content = entry.content;
+    } else {
+      filename = `${p.username.replace(/[^\w-]/g, "-")}_selected.md`;
+      content = combineSellerMarkdown(p.username, { profile: p.profile, gigs: p.gigs });
+    }
+    setTimeout(() => triggerDownload(filename, content), i * 200);
+  });
+
+  showToast(`Downloading ${plural(picks.length, "file")}`);
 }
 
 function combineSellerMarkdown(username, s) {

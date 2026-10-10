@@ -137,6 +137,41 @@
   .chip:hover { color: var(--ink); background: var(--paper); }
   .chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
 
+  /* ---------- selection ---------- */
+  input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: var(--green);
+    cursor: pointer;
+  }
+  #selectRow {
+    display: none;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+  }
+  #selectRow label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+  #selectionBar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -4px 12px rgba(34, 35, 37, 0.06);
+  }
+  #selectionBar.show { display: flex; }
+  #selectionCount { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar-actions { display: flex; align-items: center; gap: 6px; }
+  .seller-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .item-check { position: absolute; left: 10px; top: 11px; }
+
   /* ---------- list ---------- */
   #list {
     flex: 1;
@@ -219,7 +254,8 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     column-gap: 8px;
-    padding: 9px 4px 5px 12px;
+    position: relative;
+    padding: 9px 4px 5px 34px;
     border-radius: 0 8px 8px 0;
     transition: background-color 0.12s ease;
   }
@@ -378,7 +414,23 @@
   </div>
 
   <div id="filters"></div>
+
+  <div id="selectRow">
+    <label><input type="checkbox" id="selectAll" aria-label="Select all shown items"> Select all</label>
+  </div>
+
   <div id="list"></div>
+
+  <div id="selectionBar">
+    <span id="selectionCount"></span>
+    <div class="bar-actions">
+      <button class="btn" id="deselectBtn">Deselect</button>
+      <button class="btn primary" id="downloadSelectedBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Download selected
+      </button>
+    </div>
+  </div>
 
   <div id="viewerOverlay">
     <div class="viewer-head">

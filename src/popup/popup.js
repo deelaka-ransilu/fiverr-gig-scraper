@@ -299,9 +299,16 @@ document.getElementById("clearAllBtn").addEventListener("click", clearAll);
 // Direct Blob-based download — avoids Chrome's known filename bug with large data: URIs
 // relayed through the background service worker. popup.js has full DOM access,
 // so we create the Blob and call chrome.downloads.download() right here.
-function triggerDownload(filename, content) {
+async function triggerDownload(filename, content) {
   const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
   const blobUrl = URL.createObjectURL(blob);
+
+  // Tell the background which name to enforce (see onDeterminingFilename in background.js)
+  try {
+    await chrome.runtime.sendMessage({ type: "expectDownload", url: blobUrl, filename });
+  } catch (err) {
+    console.warn("expectDownload failed, falling back to the browser's naming:", err);
+  }
 
   chrome.downloads.download({
     url: blobUrl,
@@ -313,9 +320,46 @@ function triggerDownload(filename, content) {
   });
 }
 
+// ---- file naming -------------------------------------------------
+// Gig:     <seller>_<category>_<short-title>.md
+//          madilyani_Figma-to-Web-App_convert-figma-to-reactjs-or-nextjs-website-with-ai-integration.md
+// Profile: <seller>_profile.md
+// Built at download time from the saved entry, so gigs saved earlier get the new names too.
+function slugify(s) {
+  return String(s || "").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-");
+}
+
+function shortTitleSlug(title, max = 70) {
+  // drop the "I will ..." boilerplate every gig title starts with
+  const t = String(title || "").replace(/^(i\s*will|i[’']ll|i\s*can|we\s*will)\s+/i, "");
+  const words = slugify(t).split("-").filter(Boolean);
+  let out = "";
+  for (const w of words) {
+    if ((out ? out.length + 1 : 0) + w.length > max) break; // cut at a word boundary
+    out += (out ? "-" : "") + w;
+  }
+  return out || (words[0] || "gig").slice(0, max);
+}
+
+function categoryPathFor(entry) {
+  // The full breadcrumb is already inside the saved Markdown:
+  // "**Category:** Programming & Tech > Software Development > Figma to Web & App"
+  const m = /^\*\*Category:\*\*[ \t]*(.+)$/m.exec(entry.content || "");
+  let parts = m ? m[1].split(">").map(slugify).filter(Boolean) : [];
+  if (!parts.length && entry.category) parts = [slugify(entry.category)];
+  return parts.join("_");
+}
+
+function fileNameFor(username, kind, entry) {
+  const seller = username.replace(/[^\w-]/g, "-");
+  if (kind === "profile") return `${seller}_profile.md`;
+  return [categoryPathFor(entry), seller, shortTitleSlug(entry.title)].filter(Boolean).join("_") + ".md";
+}
+
 function downloadItem(refId) {
-  const { entry } = resolveRef(refId);
-  triggerDownload(entry.filename, entry.content);
+  const { entry, username } = resolveRef(refId);
+  const kind = refId.split("::")[1];
+  triggerDownload(fileNameFor(username, kind, entry), entry.content);
 }
 
 async function deleteItem(refId) {

@@ -1,37 +1,23 @@
 // ============================================================
 // Background service worker
-// Stores scraped gig/profile data in chrome.storage.local,
-// grouped by seller username. Handles downloads triggered
-// from the popup (single item, per-seller, or all).
+// Only responsible for storing scraped gig/profile data in
+// chrome.storage.local, grouped by seller username.
+//
+// Downloads are handled directly in popup.js (via Blob URLs),
+// NOT relayed through here.
 // ============================================================
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "store") {
-    storeItem(msg).then(() => sendResponse({ ok: true }));
+    storeItem(msg)
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => {
+        console.error("storeItem failed:", err);
+        sendResponse({ ok: false, error: String(err) });
+      });
     return true; // keep the message channel open for the async sendResponse
   }
-
-  if (msg.type === "download") {
-    downloadFile(msg.filename, msg.content);
-  }
-
-  if (msg.type === "downloadMultiple") {
-    // msg.files: [{ filename, content }, ...]
-    msg.files.forEach((f, i) => {
-      // stagger slightly so Chrome doesn't collapse rapid-fire downloads
-      setTimeout(() => downloadFile(f.filename, f.content), i * 150);
-    });
-  }
 });
-
-function downloadFile(filename, content) {
-  const dataUrl = "data:text/markdown;charset=utf-8," + encodeURIComponent(content);
-  chrome.downloads.download({
-    url: dataUrl,
-    filename: filename || "gig.md",
-    saveAs: false
-  });
-}
 
 async function storeItem({ username, kind, title, filename, content, url, category }) {
   const data = await chrome.storage.local.get("sellers");

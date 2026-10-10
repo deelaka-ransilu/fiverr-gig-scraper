@@ -4,11 +4,22 @@
 // This file creates the buttons and wires click -> scrape -> store.
 // Data is stored via chrome.storage.local (see background.js) and
 // browsed/downloaded from the extension's popup, not downloaded instantly.
+// After the background confirms the save, the button plays a
+// "saved" animation (flashButtonSaved in src/ui/widget.js).
 // ============================================================
 
 function getUsernameFromUrl() {
   const segments = location.pathname.split('/').filter(Boolean);
   return segments[0] || "unknown";
+}
+
+// Sends the scraped item to the background worker and waits for its confirmation.
+// Only an explicit { ok: false } counts as a failure.
+async function storeScrapedItem(payload) {
+  const res = await chrome.runtime.sendMessage({ type: "store", ...payload });
+  if (res && res.ok === false) {
+    throw new Error(res.error || "Background failed to store the item");
+  }
 }
 
 const row = createButtonRow();
@@ -40,6 +51,7 @@ if (onProfile) {
 if (gigBtn) {
   gigBtn.addEventListener("click", async () => {
     const restore = setButtonLoading(gigBtn);
+    let saved = false;
 
     try {
       const title = parseTitle();
@@ -68,8 +80,7 @@ if (gigBtn) {
       const filenameParts = [safeUsername, safeCategory, safeName].filter(Boolean);
       const filename = `${filenameParts.join("_")}.md`;
 
-      chrome.runtime.sendMessage({
-        type: "store",
+      await storeScrapedItem({
         kind: "gig",
         username: getUsernameFromUrl(),
         title,
@@ -78,18 +89,22 @@ if (gigBtn) {
         url: location.href,
         category
       });
+      saved = true;
     } catch (err) {
       console.error("Scrape failed:", err);
       alert("Scrape failed - check console for details.");
     } finally {
       restore();
     }
+
+    if (saved) flashButtonSaved(gigBtn, "Gig saved");
   });
 }
 
 if (profileBtn) {
   profileBtn.addEventListener("click", async () => {
     const restore = setButtonLoading(profileBtn);
+    let saved = false;
 
     try {
       await expandSkillsAndServices();
@@ -98,8 +113,7 @@ if (profileBtn) {
       const safeUsername = getUsernameFromUrl().replace(/[^\w-]/g, "-");
       const filename = `${safeUsername}_profile.md`;
 
-      chrome.runtime.sendMessage({
-        type: "store",
+      await storeScrapedItem({
         kind: "profile",
         username: getUsernameFromUrl(),
         title: `${profile.name} — Profile`,
@@ -108,11 +122,14 @@ if (profileBtn) {
         url: location.href,
         category: null
       });
+      saved = true;
     } catch (err) {
       console.error("Profile scrape failed:", err);
       alert("Profile scrape failed - check console.");
     } finally {
       restore();
     }
+
+    if (saved) flashButtonSaved(profileBtn, "Profile saved");
   });
 }

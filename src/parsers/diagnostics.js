@@ -27,6 +27,11 @@ function checkGigCompleteness({ title, seller, sellerBio, about, tiers, reviews,
   const expected = parseInt(String(seller.reviews).replace(/\D/g, ""), 10) || 0;
   if (expected > 0 && reviews.length === 0) missing.push("reviews");
   else if (expected > 0 && reviews.length < expected) missing.push(`reviews (${reviews.length} of ${expected})`);
+  // Prices on some reviews but not others means the page hadn't finished rendering them
+  const withPrice = reviews.filter(r => r.price).length;
+  if (withPrice > 0 && withPrice < reviews.length) {
+    missing.push(`review prices (${reviews.length - withPrice} of ${reviews.length} missing)`);
+  }
   if (!breadcrumb.length) missing.push("category");
 
   return missing;
@@ -100,6 +105,13 @@ function buildGigDiagnostic(missing) {
     "",
     "--- more/show/see/load buttons and links ---",
     moreControls,
+    "",
+    "--- first review item without a price (html, 1500) ---",
+    snip(
+      Array.from(getReviewList()?.querySelectorAll("li.review-item-component") || [])
+        .find(li => !/\$[\d,]+/.test(li.innerText)),
+      1500
+    ),
     "",
     "--- elements with 'description' in class/id ---",
     inventory("description"),

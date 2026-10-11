@@ -88,6 +88,7 @@ async function saveGig(gigBtn) {
 
     await loadAllReviews();
     await expandAllReviews();
+    await new Promise(r => setTimeout(r, 800)); // let review prices/durations finish rendering
     const reviews = parseReviews();
 
     // Which sections came back empty? Incomplete gigs get a page diagnostic stored with them.

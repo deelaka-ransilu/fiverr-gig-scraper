@@ -24,9 +24,13 @@ function buildProfileMarkdown(profile) {
 
   md += `## Work Experience\n\n`;
   profile.workExperience.forEach(e => {
-    md += `### ${e.jobTitle}\n`;
-    md += `*${e.companyType} | ${e.dates}*\n\n`;
-    md += `${e.description}\n\n`;
+    md += `### ${e.company}\n`;
+    if (e.employment) md += `*${e.employment}*\n`;
+    e.roles.forEach(r => {
+      md += `- **${r.title || "Role"}**${r.dates ? ` — ${r.dates}` : ""}\n`;
+      if (r.description) md += `  ${r.description}\n`;
+    });
+    md += `\n`;
   });
 
   return md;

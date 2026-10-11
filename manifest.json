@@ -18,6 +18,7 @@
       "js": [
         "src/ui/widget.js",
         "src/parsers/gig-parsers.js",
+        "src/parsers/diagnostics.js",
         "src/parsers/single-package-parser.js",
         "src/parsers/profile-parsers.js",
         "src/markdown/gig-markdown.js",

@@ -3,28 +3,49 @@
 // Each function reads one section of a Fiverr gig page.
 // Selectors were checked on a live gig (counts all > 0); the review
 // "load more" control is still a best guess, see loadAllReviews().
+//
+// Fiverr serves more than one layout. Seller info, the description and the
+// seller details have an older layout (text right after the h1, .description-wrapper,
+// .stats-desc) and a newer one (.seller-card, an "About this Gig" heading).
+// Each parser tries the old one first, then the new one.
 // ============================================================
 
 function parseTitle() {
   return document.querySelector("h1")?.innerText.trim() || "";
 }
 
+// Text lines of the newer seller header card (name, rating, country, languages, orders).
+function getSellerCardLines() {
+  const card = document.querySelector('.seller-card');
+  return (card?.innerText || "").split("\n").map(l => l.trim()).filter(l => l.length > 0);
+}
+
 function parseSeller() {
   const h1 = document.querySelector("h1");
-  const raw = h1?.nextElementSibling?.innerText || "";
-  const lines = raw.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+  let lines = (h1?.nextElementSibling?.innerText || "")
+    .split("\n").map(l => l.trim()).filter(l => l.length > 0);
+  if (!lines.length) lines = getSellerCardLines(); // newer layout
+  const text = lines.join(" ");
 
   const hasFiverrsChoice = lines.some(l => /^fiverr/i.test(l)) && lines.some(l => /^choice$/i.test(l));
   const level = lines.find(l => /^(level \d|top rated|new seller|vetted pro)/i.test(l)) || "";
-  const rating = lines.find(l => /^\d\.\d$/.test(l)) || "";
-  const reviewsLine = lines.find(l => /^\(\s*[\d,]+\s*reviews?\)$/i.test(l)) || "";
-  const reviews = reviewsLine.replace(/[()]/g, "").replace(/\s*reviews?/i, "").trim();
+
+  // "5.0 (15)" on one line, or "5.0" and "(15)" on separate lines; the word "reviews" is optional
+  const combo = text.match(/\b(\d\.\d)\s*\(\s*([\d,]+)\s*(?:reviews?)?\s*\)/i);
+  const rating = combo ? combo[1] : (lines.find(l => /^\d\.\d$/.test(l)) || "");
+  const reviewsLine = lines.find(l => /^\(\s*[\d,]+\s*(reviews?)?\s*\)$/i.test(l)) || "";
+  const reviews = combo ? combo[2] : reviewsLine.replace(/[()]/g, "").replace(/\s*reviews?/i, "").trim();
+
   const sellerName = lines.find(l =>
     l.length > 1 &&
     l !== level &&
     l !== rating &&
     l !== reviewsLine &&
-    !/fiverr|choice/i.test(l)
+    !/^\d\.\d/.test(l) &&
+    !/fiverr|choice/i.test(l) &&
+    !/^(contact me|message)/i.test(l) &&
+    !/orders? (completed|in queue)/i.test(l) &&
+    !/^i speak /i.test(l)
   ) || "";
 
   return { sellerName, hasFiverrsChoice, level, rating, reviews };
@@ -86,11 +107,21 @@ function parseSellerBio() {
     return idx !== -1 ? lines[idx + 1] || "" : "";
   };
 
-  const from = getValueAfter("From");
+  let from = getValueAfter("From");
   const memberSince = getValueAfter("Member since");
   const avgResponseTime = getValueAfter("Avg. response time");
   const lastDelivery = getValueAfter("Last delivery");
-  const languages = getValueAfter("Languages");
+  let languages = getValueAfter("Languages");
+
+  // Newer layout: the seller card lists the country, then "I speak <languages>"
+  if (!from || !languages) {
+    const cardLines = getSellerCardLines();
+    const langIdx = cardLines.findIndex(l => /^i speak /i.test(l));
+    if (langIdx !== -1) {
+      if (!languages) languages = cardLines[langIdx].replace(/^i speak\s*/i, "");
+      if (!from && langIdx > 0) from = cardLines[langIdx - 1];
+    }
+  }
 
   const bio = document.querySelector('.seller-desc')?.innerText.trim().replace(/\s*See (More|Less)\s*$/i, "") || "";
 
@@ -127,12 +158,46 @@ function parseRatingBreakdown() {
   return { starCounts, categories };
 }
 
+// ------------------------------------------------------------
+// Gig description
+// Older layout: .description-wrapper. Newer layout has no such class, so the
+// section is found from its "About this Gig" heading: the smallest ancestor of
+// the heading that also holds the description text.
+// ------------------------------------------------------------
+function findAboutSection() {
+  const heading = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,b,strong,div,span,p'))
+    .find(el => /^about this gig$/i.test((el.textContent || "").trim()) &&
+                !el.querySelector('h1,h2,h3,h4,h5,div,p'));
+  if (!heading) return null;
+
+  const headLen = heading.textContent.trim().length;
+  let node = heading;
+  for (let i = 0; i < 6 && node.parentElement; i++) {
+    node = node.parentElement;
+    if ((node.innerText || "").trim().length > headLen + 80) return node;
+  }
+  return null;
+}
+
+// Clicks "Read More" in the description area so the full text is in the page.
+async function expandAbout() {
+  const scope = findAboutSection() || document;
+  const btns = Array.from(scope.querySelectorAll('button, [role="button"], a:not([href])'))
+    .filter(b => !b.closest('li') && /^read more$/i.test(b.innerText.trim()));
+  btns.forEach(b => b.click());
+  if (btns.length) await new Promise(r => setTimeout(r, 300));
+}
+
 function parseAboutGig() {
-  const wrapper = document.querySelector('.description-wrapper');
+  let raw = document.querySelector('.description-wrapper')?.innerText || "";
+  if (!raw) {
+    const section = findAboutSection();
+    raw = (section?.innerText || "")
+      .replace(/^\s*about this gig\s*/i, "")
+      .replace(/\s*Read (More|Less)\s*$/i, "");
+  }
   // Fiverr leaves 3-4 empty lines between sections; keep a single blank line.
-  return wrapper
-    ? wrapper.innerText.trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n")
-    : "";
+  return raw.trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
 }
 
 // Gig address without Fiverr's tracking query string (ref_ctx_id, imp_id, ad_key ...).

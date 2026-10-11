@@ -13,6 +13,9 @@
 //   removes the buttons when the route changes without a page reload.
 // - If the extension is reloaded, the orphaned script removes its own
 //   buttons instead of failing with "Extension context invalidated".
+// - After scraping a gig, checkGigCompleteness() (src/parsers/diagnostics.js)
+//   lists any empty sections. An incomplete gig is saved with its warnings
+//   and a page diagnostic, which the popup can copy.
 // ============================================================
 
 const ROW_ID = "fgs-button-row";
@@ -65,8 +68,10 @@ async function saveGig(gigBtn) {
   const wasSaved = gigBtn.dataset.saved === "1";
   const restore = setButtonLoading(gigBtn);
   let saved = false;
+  let missing = [];
 
   try {
+    await expandAbout(); // "Read More" under the description, so the full text is in the page
     const title = parseTitle();
     const seller = parseSeller();
     const about = parseAboutGig();
@@ -85,6 +90,11 @@ async function saveGig(gigBtn) {
     await expandAllReviews();
     const reviews = parseReviews();
 
+    // Which sections came back empty? Incomplete gigs get a page diagnostic stored with them.
+    missing = checkGigCompleteness({ title, seller, sellerBio, about, tiers, reviews, breadcrumb });
+    const diagnostic = missing.length ? buildGigDiagnostic(missing) : "";
+    if (missing.length) console.warn("[gig-scraper] incomplete scrape, missing:", missing);
+
     const markdown = buildMarkdown({ title, seller, sellerBio, about, tiers, reviews, faq, ratingBreakdown, breadcrumb, relatedTags, portfolioCount, hourlyRate });
 
     const category = breadcrumb.length ? breadcrumb[breadcrumb.length - 1] : null;
@@ -100,7 +110,9 @@ async function saveGig(gigBtn) {
       filename,
       content: markdown,
       url: cleanGigUrl(),
-      category
+      category,
+      warnings: missing,
+      diagnostic
     });
     saved = true;
   } catch (err) {
@@ -109,7 +121,8 @@ async function saveGig(gigBtn) {
     restore();
   }
 
-  finishSave(gigBtn, saved, wasSaved ? "Gig updated" : "Gig saved");
+  const doneText = wasSaved ? "Gig updated" : "Gig saved";
+  finishSave(gigBtn, saved, missing.length ? `${doneText} (incomplete)` : doneText);
 }
 
 async function saveProfile(profileBtn) {
@@ -132,7 +145,7 @@ async function saveProfile(profileBtn) {
       title: `${profile.name} — Profile`,
       filename: `${safeUsername}_profile.md`,
       content: markdown,
-      url: location.href,
+      url: cleanPageUrl(),
       category: null
     });
     saved = true;

@@ -64,7 +64,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-async function storeItem({ username, kind, title, filename, content, url, category }) {
+async function storeItem({ username, kind, title, filename, content, url, category, warnings, diagnostic }) {
   const data = await chrome.storage.local.get("sellers");
   const sellers = data.sellers || {};
 
@@ -72,7 +72,16 @@ async function storeItem({ username, kind, title, filename, content, url, catego
     sellers[username] = { username, gigs: [], profile: null };
   }
 
-  const entry = { title, filename, content, url, category: category || null, savedAt: Date.now() };
+  const entry = {
+    title,
+    filename,
+    content,
+    url,
+    category: category || null,
+    warnings: warnings || [],      // names of sections that came back empty
+    diagnostic: diagnostic || "",  // page report for fixing the parser (only set when incomplete)
+    savedAt: Date.now()
+  };
 
   if (kind === "gig") {
     // Re-scraping the same gig (same title) overwrites rather than duplicates

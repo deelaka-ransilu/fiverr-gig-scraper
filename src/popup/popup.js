@@ -5,6 +5,9 @@
 //
 // Uses an in-popup confirm dialog (confirmDialog) and a small toast
 // (showToast) instead of the browser's native confirm()/alert().
+//
+// Gigs saved with empty sections carry `warnings` and a `diagnostic`
+// report; those items show a warning icon that copies the diagnostic.
 // ============================================================
 
 let sellers = {};
@@ -24,6 +27,7 @@ const ICON_OPEN = svg(`<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 
 const ICON_DOWNLOAD = svg(`<path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/>`);
 const ICON_TRASH = svg(`<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>`);
 const ICON_CHECK = svg(`<path d="M5 13l4 4L19 7"/>`, 16, 2.4);
+const ICON_WARN = svg(`<path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>`);
 
 async function loadSellers() {
   const data = await chrome.storage.local.get("sellers");
@@ -193,6 +197,7 @@ function render() {
       const refId = btn.dataset.ref;
       if (action === "view") viewItem(refId);
       if (action === "copy") copyItem(refId, btn);
+      if (action === "diagnostic") copyDiagnostic(refId, btn);
       if (action === "open") openItem(refId);
       if (action === "download") { downloadItem(refId); flashIcon(btn); }
       if (action === "delete") deleteItem(refId);
@@ -227,6 +232,12 @@ function itemRow(username, kind, index, entry) {
   const tag = kind === "profile"
     ? `<span class="item-kind">Profile</span>`
     : (entry.category ? `<span class="item-category">${escapeHtml(entry.category)}</span>` : "");
+  const warnTitle = entry.diagnostic
+    ? `Incomplete: ${(entry.warnings || []).join(", ") || "some sections"}. Click to copy the diagnostic.`
+    : "";
+  const warnBtn = entry.diagnostic
+    ? `<button class="icon-btn warn-btn" title="${escapeAttr(warnTitle)}" data-action="diagnostic" data-ref="${refId}">${ICON_WARN}</button>`
+    : "";
   return `
     <div class="item">
       <input type="checkbox" class="item-check" data-key="${escapeAttr(selKey(username, kind, entry))}" aria-label="Select ${escapeAttr(entry.title)}">
@@ -238,6 +249,7 @@ function itemRow(username, kind, index, entry) {
         </div>
       </div>
       <div class="item-actions">
+        ${warnBtn}
         <button class="icon-btn" title="View" data-action="view" data-ref="${refId}">${ICON_EYE}</button>
         <button class="icon-btn" title="Copy Markdown" data-action="copy" data-ref="${refId}">${ICON_COPY}</button>
         <button class="icon-btn" title="Open on Fiverr" data-action="open" data-ref="${refId}">${ICON_OPEN}</button>
@@ -335,6 +347,18 @@ async function copyItem(refId, btn) {
   const ok = await copyText(entry.content);
   if (ok) flashIcon(btn);
   else showToast("Couldn't copy to the clipboard");
+}
+
+// Copies the page report stored with an incomplete gig, ready to paste into a chat.
+async function copyDiagnostic(refId, btn) {
+  const { entry } = resolveRef(refId);
+  const ok = await copyText(entry.diagnostic || "");
+  if (ok) {
+    flashIcon(btn);
+    showToast("Diagnostic copied");
+  } else {
+    showToast("Couldn't copy to the clipboard");
+  }
 }
 
 function openItem(refId) {

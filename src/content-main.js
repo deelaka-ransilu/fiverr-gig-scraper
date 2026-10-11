@@ -81,6 +81,7 @@ async function saveGig(gigBtn) {
     await expandSellerBio();
     const sellerBio = parseSellerBio();
 
+    await loadAllReviews();
     await expandAllReviews();
     const reviews = parseReviews();
 
@@ -98,7 +99,7 @@ async function saveGig(gigBtn) {
       title,
       filename,
       content: markdown,
-      url: location.href,
+      url: cleanGigUrl(),
       category
     });
     saved = true;

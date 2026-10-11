@@ -1,7 +1,8 @@
 // ============================================================
 // Gig page parsers
 // Each function reads one section of a Fiverr gig page.
-// All selectors validated in console before being added here.
+// Selectors were checked on a live gig (counts all > 0); the review
+// "load more" control is still a best guess, see loadAllReviews().
 // ============================================================
 
 function parseTitle() {
@@ -128,16 +129,26 @@ function parseRatingBreakdown() {
 
 function parseAboutGig() {
   const wrapper = document.querySelector('.description-wrapper');
-  return wrapper ? wrapper.innerText.trim() : "";
+  // Fiverr leaves 3-4 empty lines between sections; keep a single blank line.
+  return wrapper
+    ? wrapper.innerText.trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n")
+    : "";
 }
 
+// Gig address without Fiverr's tracking query string (ref_ctx_id, imp_id, ad_key ...).
+function cleanGigUrl() {
+  return location.origin + location.pathname;
+}
+
+// Comparison-table layout. When the page has no table, falls back to the
+// package-tab / single-package parser (src/parsers/single-package-parser.js).
 function parseComparisonTable() {
   const table = document.querySelector('.gig-page-packages-table table');
   if (!table) return parseSinglePackage();
 
   const rows = Array.from(table.querySelectorAll('tbody > tr'));
   const headerRow = rows.find(r => r.classList.contains('package-type'));
-  if (!headerRow) return [];
+  if (!headerRow) return parseSinglePackage();
 
   const ths = headerRow.querySelectorAll('th.package-type-price');
 
@@ -200,8 +211,58 @@ function parseComparisonTable() {
   return tiers;
 }
 
+// ------------------------------------------------------------
+// Reviews
+// The page renders TWO identical `ul.review-list` elements (desktop + mobile),
+// each starting with only the first few reviews. We always work on the one with
+// the most items, so reviews are never duplicated or read from the short copy.
+// ------------------------------------------------------------
+function getReviewList() {
+  const lists = Array.from(document.querySelectorAll('ul.review-list'));
+  if (!lists.length) return null;
+  const count = l => l.querySelectorAll('li.review-item-component').length;
+  return lists.reduce((best, l) => (count(l) > count(best) ? l : best), lists[0]);
+}
+
+function countLoadedReviews() {
+  return getReviewList()?.querySelectorAll('li.review-item-component').length || 0;
+}
+
+// Clicks the "show/see/load more" control under the reviews until every review
+// is loaded (or nothing more appears). The selector is a best guess: any
+// button/link outside a review item whose text says "show/see/load/view more"
+// or "more reviews". If no such control exists the loop just stops.
+async function loadAllReviews(maxClicks = 15) {
+  const total = parseInt(String(parseSeller().reviews).replace(/[^\d]/g, ""), 10) || 0;
+  const scope = document.querySelector('.reviews-wrap') || document;
+
+  const findMoreBtn = () => Array.from(scope.querySelectorAll('button, a')).find(b =>
+    !b.closest('li') &&
+    /(show|see|load|view)\s+more|more\s+reviews/i.test(b.innerText.trim())
+  );
+
+  const waitFor = async (cond, ms) => {
+    const start = Date.now();
+    while (Date.now() - start < ms) {
+      if (cond()) return true;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return cond();
+  };
+
+  for (let i = 0; i < maxClicks; i++) {
+    const before = countLoadedReviews();
+    if (total && before >= total) break;
+    const btn = findMoreBtn();
+    if (!btn) break;
+    btn.click();
+    const grew = await waitFor(() => countLoadedReviews() > before, 3000);
+    if (!grew) break;
+  }
+}
+
 async function expandAllReviews() {
-  const list = document.querySelector('ul.review-list');
+  const list = getReviewList();
   if (!list) return;
   const buttons = list.querySelectorAll('.expand-description');
   buttons.forEach(btn => {
@@ -213,7 +274,7 @@ async function expandAllReviews() {
 }
 
 function parseReviews() {
-  const list = document.querySelector('ul.review-list');
+  const list = getReviewList();
   if (!list) return [];
 
   const items = Array.from(list.querySelectorAll('li.review-item-component'));
@@ -221,7 +282,9 @@ function parseReviews() {
   return items.map(li => {
     const name = li.querySelector('p')?.innerText.trim() || "";
     const country = li.querySelector('.country p')?.innerText.trim() || "";
-    const text = li.querySelector('.review-description, [class*="review-item-description"]')?.innerText.trim() || "";
+    const text = (li.querySelector('.review-description, [class*="review-item-description"]')?.innerText || "")
+      .trim()
+      .replace(/\s*See (more|less)\s*$/i, ""); // toggle label left over from expanding
 
     const raw = li.innerText;
     const lines = raw.split("\n").map(l => l.trim()).filter(l => l.length > 0);

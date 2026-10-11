@@ -12,7 +12,7 @@ function buildMarkdown({ title, seller, sellerBio, about, tiers, reviews, faq, r
   md += `**Category:** ${breadcrumb.join(" > ")}\n`;
   md += `**Hourly Rate:** ${hourlyRate}\n`;
   md += `**Portfolio Size:** ${portfolioCount}+ projects shown\n`;
-  md += `**URL:** ${location.href}\n\n`;
+  md += `**URL:** ${cleanGigUrl()}\n\n`;
 
   md += `## About the Seller\n\n`;
   md += `**From:** ${sellerBio.from}\n`;
